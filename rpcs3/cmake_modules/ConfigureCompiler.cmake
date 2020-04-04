@@ -27,11 +27,7 @@ else()
 	add_compile_options(-fstack-protector)
 	add_compile_options(-ftemplate-depth=1024)
 	add_compile_options(-msse -msse2 -mcx16)
-
-	add_compile_options(-Werror=old-style-cast)
-	add_compile_options(-Werror=sign-compare)
-	add_compile_options(-Werror=reorder)
-	add_compile_options(-Werror=return-type)
+	add_compile_options(-Wno-return-type)
 
 	#TODO Clean the code so these are removed
 	add_compile_options(-Wno-unused-function)
