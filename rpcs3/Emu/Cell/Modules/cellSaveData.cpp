@@ -569,7 +569,7 @@ static NEVER_INLINE error_code savedata_op(ppu_thread& ppu, u32 operation, u32 v
 	const auto lv2_sleep = [](ppu_thread& ppu, usz sleep_time)
 	{
 		lv2_obj::sleep(ppu);
-		std::this_thread::sleep_for(std::chrono::microseconds(sleep_time));
+		lv2_obj::wait_timeout(sleep_time);
 		ppu.check_state();
 	};
 
@@ -1162,7 +1162,7 @@ static NEVER_INLINE error_code savedata_op(ppu_thread& ppu, u32 operation, u32 v
 				// Reschedule after a blocking dialog returns
 				if (ppu.check_state())
 				{
-					return 0;
+					return {};
 				}
 
 				if (res != CELL_OK)

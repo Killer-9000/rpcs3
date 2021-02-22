@@ -9052,7 +9052,7 @@ struct spu_llvm
 					{
 						const u64 name = atomic_storage<u64>::load(spu.block_hash);
 
-						if (!(spu.state.load() & (cpu_flag::wait + cpu_flag::stop + cpu_flag::dbg_global_pause)))
+						if (auto state = +spu.state; !::is_paused(state) && !::is_stopped(state) && !(state & cpu_flag::wait))
 						{
 							const auto found = std::as_const(samples).find(name);
 
@@ -9097,7 +9097,7 @@ struct spu_llvm
 			{
 				// Interrupt profiler thread and put it to sleep
 				static_cast<void>(prof_mutex.reset());
-				atomic_wait::list(registered).wait(); // TODO
+				thread_ctrl::wait_on(registered, nullptr);
 				continue;
 			}
 
@@ -9128,6 +9128,8 @@ struct spu_llvm
 			// Push the workload
 			(workers.begin() + (worker_index++ % worker_count))->registered.push(reinterpret_cast<u64>(_old), &func);
 		}
+
+		static_cast<void>(prof_mutex.init_always([&]{ samples.clear(); }));
 
 		for (u32 i = 0; i < worker_count; i++)
 		{

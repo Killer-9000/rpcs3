@@ -782,7 +782,14 @@ static void ppu_check_patch_spu_images(const ppu_segment& seg)
 			}
 		}
 
-		ppu_loader.success("SPU executable hash: %s (<- %u)%s", hash, applied.size(), dump);
+		if (applied.empty())
+		{
+			ppu_loader.warning("SPU executable hash: %s%s", hash, dump);
+		}
+		else
+		{
+			ppu_loader.success("SPU executable hash: %s (<- %u)%s", hash, applied.size(), dump);
+		}
 	}
 }
 
@@ -809,6 +816,11 @@ void try_spawn_ppu_if_exclusive_program(const ppu_module& m)
 
 std::shared_ptr<lv2_prx> ppu_load_prx(const ppu_prx_object& elf, const std::string& path)
 {
+	if (elf != elf_error::ok)
+	{
+		return nullptr;
+	}
+
 	// Create new PRX object
 	const auto prx = idm::make_ptr<lv2_obj, lv2_prx>();
 
@@ -1110,7 +1122,14 @@ std::shared_ptr<lv2_prx> ppu_load_prx(const ppu_prx_object& elf, const std::stri
 	
 		applied += _applied;
 
-		ppu_loader.success("PRX library hash: %s (<- %u)", hash_seg, _applied.size());
+		if (_applied.empty())
+		{
+			ppu_loader.warning("PRX hash of %s[%u]: %s", prx->name, i, hash_seg);
+		}
+		else
+		{
+			ppu_loader.success("PRX hash of %s[%u]: %s (<- %u)", prx->name, i, hash_seg, _applied.size());
+		}
 	}
 
 	// Embedded SPU elf patching
@@ -1161,6 +1180,11 @@ void ppu_unload_prx(const lv2_prx& prx)
 
 bool ppu_load_exec(const ppu_exec_object& elf)
 {
+	if (elf != elf_error::ok)
+	{
+		return false;
+	}
+
 	// Check if it is a standalone executable first
 	for (const auto& prog : elf.progs)
 	{
@@ -1322,7 +1346,14 @@ bool ppu_load_exec(const ppu_exec_object& elf)
 		applied += g_fxo->get<patch_engine>()->apply(Emu.GetTitleID() + '-' + hash, vm::g_base_addr);
 	}
 
-	ppu_loader.always("PPU executable hash: %s (<- %u)", hash, applied.size());
+	if (applied.empty())
+	{
+		ppu_loader.warning("PPU executable hash: %s", hash);
+	}
+	else
+	{
+		ppu_loader.success("PPU executable hash: %s (<- %u)", hash, applied.size());
+	}
 
 	// Initialize HLE modules
 	ppu_initialize_modules(link);
@@ -1740,6 +1771,11 @@ bool ppu_load_exec(const ppu_exec_object& elf)
 
 std::pair<std::shared_ptr<lv2_overlay>, CellError> ppu_load_overlay(const ppu_exec_object& elf, const std::string& path)
 {
+	if (elf != elf_error::ok)
+	{
+		return {nullptr, CELL_ENOENT};
+	}
+
 	// Access linkage information object
 	const auto link = g_fxo->get<ppu_linkage_info>();
 
@@ -1765,6 +1801,10 @@ std::pair<std::shared_ptr<lv2_overlay>, CellError> ppu_load_overlay(const ppu_ex
 	}
 
 	const auto ovlm = std::make_shared<lv2_overlay>();
+
+	// Set path (TODO)
+	ovlm->name = path.substr(path.find_last_of('/') + 1);
+	ovlm->path = path;
 
 	u32 end = 0;
 
@@ -1873,7 +1913,14 @@ std::pair<std::shared_ptr<lv2_overlay>, CellError> ppu_load_overlay(const ppu_ex
 		ppu_check_patch_spu_images(seg);
 	}
 
-	ppu_loader.success("OVL executable hash: %s (<- %u)", hash, applied.size());
+	if (applied.empty())
+	{
+		ppu_loader.warning("OVL hash of %s: %s", ovlm->name, hash);
+	}
+	else
+	{
+		ppu_loader.success("OVL hash of %s: %s (<- %u)", ovlm->name, hash, applied.size());
+	}
 
 	// Load other programs
 	for (auto& prog : elf.progs)
@@ -1965,10 +2012,6 @@ std::pair<std::shared_ptr<lv2_overlay>, CellError> ppu_load_overlay(const ppu_ex
 
 	// Validate analyser results (not required)
 	ovlm->validate(0);
-
-	// Set path (TODO)
-	ovlm->name = path.substr(path.find_last_of('/') + 1);
-	ovlm->path = path;
 
 	idm::import_existing<lv2_obj, lv2_overlay>(ovlm);
 
