@@ -2390,7 +2390,7 @@ extern void ppu_precompile(std::vector<std::string>& dir_queue, std::vector<lv2_
 	named_thread_group workers("SPRX Worker ", std::min<u32>(utils::get_thread_count(), ::size32(file_queue)), [&]
 	{
 		// Set low priority
-		thread_ctrl::scoped_priority low_prio(-1);
+		thread_ctrl::scoped_priority high_prio(+1);
 
 		for (usz func_i = fnext++; func_i < file_queue.size(); func_i = fnext++, g_progr_fdone++)
 		{
@@ -2974,7 +2974,7 @@ bool ppu_initialize(const ppu_module& info, bool check_only)
 		named_thread_group threads(fmt::format("PPUW.%u.", ++g_fxo->get<thread_index_allocator>()->index), thread_count, [&]()
 		{
 			// Set low priority
-			thread_ctrl::scoped_priority low_prio(-1);
+			thread_ctrl::scoped_priority high_prio(+1);
 
 			for (u32 i = work_cv++; i < workload.size(); i = work_cv++, g_progr_pdone++)
 			{

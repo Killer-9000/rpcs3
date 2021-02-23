@@ -1430,21 +1430,21 @@ fs::file decrypt_self(fs::file elf_or_self, u8* klic_key, SelfAdditionalInfo* ou
 		// Load the SELF file headers.
 		if (!self_dec.LoadHeaders(isElf32, out_info))
 		{
-			self_log.error("SELF: Failed to load SELF file headers!");
+			self_log.error("Failed to load SELF file headers!");
 			return fs::file{};
 		}
 
 		// Load and decrypt the SELF file metadata.
 		if (!self_dec.LoadMetadata(klic_key))
 		{
-			self_log.error("SELF: Failed to load SELF file metadata!");
+			self_log.error("Failed to load SELF file metadata!");
 			return fs::file{};
 		}
 
 		// Decrypt the SELF file data.
 		if (!self_dec.DecryptData())
 		{
-			self_log.error("SELF: Failed to decrypt SELF file data!");
+			self_log.error("Failed to decrypt SELF file data!");
 			return fs::file{};
 		}
 
