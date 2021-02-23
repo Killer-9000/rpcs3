@@ -1306,7 +1306,12 @@ static NEVER_INLINE error_code savedata_op(ppu_thread& ppu, u32 operation, u32 v
 
 			if (!entry.is_directory)
 			{
-				if (entry.name == "PARAM.SFO" || entry.name == "PARAM.PFD")
+				if (entry.name == "."sv)
+				{
+					continue;
+				}
+
+				if (entry.name == "PARAM.SFO"sv || entry.name == "PARAM.PFD"sv)
 				{
 					continue; // system files are not included in the file list
 				}
@@ -1899,14 +1904,14 @@ static NEVER_INLINE error_code savedata_op(ppu_thread& ppu, u32 operation, u32 v
 		// Write all files in temporary directory
 		auto& fsfo = all_files["PARAM.SFO"];
 		fsfo = fs::make_stream<std::vector<uchar>>();
-		psf::save_object(fsfo, psf);
+		fsfo.write(psf::save_object(psf));
 
 		for (auto&& pair : all_files)
 		{
 			if (auto file = pair.second.release())
 			{
 				auto fvec = static_cast<fs::container_stream<std::vector<uchar>>&>(*file);
-				fs::file(new_path + vfs::escape(pair.first), fs::rewrite).write(fvec.obj);
+				ensure(fs::write_file<true>(new_path + vfs::escape(pair.first), fs::rewrite, fvec.obj));
 			}
 		}
 
