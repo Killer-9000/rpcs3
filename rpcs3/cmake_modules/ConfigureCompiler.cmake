@@ -27,12 +27,6 @@ else()
 	add_compile_options(-fstack-protector)
 	add_compile_options(-msse -msse2 -mcx16)
 
-	add_compile_options(-Werror=old-style-cast)
-	add_compile_options(-Werror=sign-compare)
-	add_compile_options(-Werror=reorder)
-	add_compile_options(-Werror=return-type)
-	add_compile_options(-Werror=overloaded-virtual)
-
 	if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 		add_compile_options(-Werror=inconsistent-missing-override)
 	elseif(CMAKE_COMPILER_IS_GNUCXX)
