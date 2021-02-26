@@ -193,6 +193,9 @@ namespace fs
 	// Set file access/modification time
 	bool utime(const std::string& path, s64 atime, s64 mtime);
 
+	// Synchronize filesystems (TODO)
+	void sync();
+
 	class file final
 	{
 		std::unique_ptr<file_base> m_file;
@@ -607,7 +610,7 @@ namespace fs
 	{
 		fs::file file;
 
-		// This is meant to modify files atomically, overwriting is likely 
+		// This is meant to modify files atomically, overwriting is likely
 		bool commit(bool overwrite = true);
 
 		pending_file(const std::string& path);

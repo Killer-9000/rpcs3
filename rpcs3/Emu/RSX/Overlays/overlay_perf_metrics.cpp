@@ -10,6 +10,7 @@
 #include <charconv>
 
 #include "util/sysinfo.hpp"
+#include "util/cpu_stats.hpp"
 
 namespace rsx
 {
@@ -423,7 +424,7 @@ namespace rsx
 
 						m_rsx_load = rsx_thread->get_load();
 
-						m_total_threads = CPUStats::get_thread_count();
+						m_total_threads = utils::cpu_stats::get_thread_count();
 
 						[[fallthrough]];
 					}
@@ -452,7 +453,7 @@ namespace rsx
 					}
 					case detail_level::low:
 					{
-						if (m_cpu_usage < 0.)
+						if (m_detail == detail_level::low) // otherwise already acquired in medium
 							m_cpu_usage = static_cast<f32>(m_cpu_stats.get_usage());
 
 						[[fallthrough]];

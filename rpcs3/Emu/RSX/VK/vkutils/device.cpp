@@ -44,9 +44,9 @@ namespace vk
 				features2.pNext         = &driver_properties;
 			}
 
-			auto getPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(vkGetInstanceProcAddr(parent, "vkGetPhysicalDeviceFeatures2KHR"));
-			ensure(getPhysicalDeviceFeatures2KHR); // "vkGetInstanceProcAddress failed to find entry point!"
-			getPhysicalDeviceFeatures2KHR(dev, &features2);
+			auto _vkGetPhysicalDeviceFeatures2KHR = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(vkGetInstanceProcAddr(parent, "vkGetPhysicalDeviceFeatures2KHR"));
+			ensure(_vkGetPhysicalDeviceFeatures2KHR); // "vkGetInstanceProcAddress failed to find entry point!"
+			_vkGetPhysicalDeviceFeatures2KHR(dev, &features2);
 
 			shader_types_support.allow_float64 = !!features2.features.shaderFloat64;
 			shader_types_support.allow_float16 = !!shader_support_info.shaderFloat16;
@@ -234,15 +234,10 @@ namespace vk
 		float queue_priorities[1] = { 0.f };
 		pgpu = &pdev;
 
-		ensure(graphics_queue_idx == present_queue_idx || present_queue_idx == UINT32_MAX); // TODO
-		m_graphics_queue_family = graphics_queue_idx;
-		m_present_queue_family = present_queue_idx;
-		m_transfer_queue_family = transfer_queue_idx;
-
+		ensure(graphics_queue_idx == present_queue_idx || present_queue_idx == umax); // TODO
 		std::vector<VkDeviceQueueCreateInfo> device_queues;
-		device_queues.push_back({});
 
-		auto & graphics_queue = device_queues.back();
+		auto& graphics_queue = device_queues.emplace_back();
 		graphics_queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		graphics_queue.pNext = NULL;
 		graphics_queue.flags = 0;
@@ -250,12 +245,29 @@ namespace vk
 		graphics_queue.queueCount = 1;
 		graphics_queue.pQueuePriorities = queue_priorities;
 
+		u32 transfer_queue_sub_index = 0;
+		if (transfer_queue_idx == umax)
+		{
+			// Transfer queue must be a valid device queue
+			rsx_log.warning("Dedicated transfer+compute queue was not found on this GPU. Will use graphics queue instead.");
+			transfer_queue_idx = graphics_queue_idx;
+
+			// Check if we can at least get a second graphics queue
+			if (pdev.get_queue_properties(graphics_queue_idx).queueCount > 1)
+			{
+				rsx_log.notice("Will use a spare graphics queue to push transfer operations.");
+				graphics_queue.queueCount++;
+				transfer_queue_sub_index = 1;
+			}
+		}
+
+		m_graphics_queue_family = graphics_queue_idx;
+		m_present_queue_family = present_queue_idx;
+		m_transfer_queue_family = transfer_queue_idx;
+
 		if (graphics_queue_idx != transfer_queue_idx)
 		{
-			ensure(transfer_queue_idx != UINT32_MAX);
-
-			device_queues.push_back({});
-			auto & transfer_queue = device_queues.back();
+			auto& transfer_queue = device_queues.emplace_back();
 			transfer_queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 			transfer_queue.pNext = NULL;
 			transfer_queue.flags = 0;
@@ -411,7 +423,7 @@ namespace vk
 
 		// Initialize queues
 		vkGetDeviceQueue(dev, graphics_queue_idx, 0, &m_graphics_queue);
-		vkGetDeviceQueue(dev, transfer_queue_idx, 0, &m_transfer_queue);
+		vkGetDeviceQueue(dev, transfer_queue_idx, transfer_queue_sub_index, &m_transfer_queue);
 
 		if (present_queue_idx != UINT32_MAX)
 		{
@@ -421,8 +433,8 @@ namespace vk
 		// Import optional function endpoints
 		if (pgpu->conditional_render_support)
 		{
-			cmdBeginConditionalRenderingEXT = reinterpret_cast<PFN_vkCmdBeginConditionalRenderingEXT>(vkGetDeviceProcAddr(dev, "vkCmdBeginConditionalRenderingEXT"));
-			cmdEndConditionalRenderingEXT = reinterpret_cast<PFN_vkCmdEndConditionalRenderingEXT>(vkGetDeviceProcAddr(dev, "vkCmdEndConditionalRenderingEXT"));
+			_vkCmdBeginConditionalRenderingEXT = reinterpret_cast<PFN_vkCmdBeginConditionalRenderingEXT>(vkGetDeviceProcAddr(dev, "vkCmdBeginConditionalRenderingEXT"));
+			_vkCmdEndConditionalRenderingEXT = reinterpret_cast<PFN_vkCmdEndConditionalRenderingEXT>(vkGetDeviceProcAddr(dev, "vkCmdEndConditionalRenderingEXT"));
 		}
 
 		memory_map = vk::get_memory_mapping(pdev);
@@ -431,7 +443,7 @@ namespace vk
 
 		if (pgpu->external_memory_host_support)
 		{
-			memory_map.getMemoryHostPointerPropertiesEXT = reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(vkGetDeviceProcAddr(dev, "vkGetMemoryHostPointerPropertiesEXT"));
+			memory_map._vkGetMemoryHostPointerPropertiesEXT = reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(vkGetDeviceProcAddr(dev, "vkGetMemoryHostPointerPropertiesEXT"));
 		}
 
 		if (g_cfg.video.disable_vulkan_mem_allocator)
