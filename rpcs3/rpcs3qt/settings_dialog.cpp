@@ -1285,6 +1285,12 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> gui_settings, std
 	EnhanceSlider(emu_settings_type::PerfOverlayOpacity, ui->perfOverlayOpacity, ui->label_opacity, tr("Opacity: %0 %", "Performance overlay opacity"));
 	SubscribeTooltip(ui->perf_overlay_opacity, tooltips.settings.perf_overlay_opacity);
 
+	EnhanceSlider(emu_settings_type::PerfOverlayFramerateDatapoints, ui->slider_framerate_datapoints, ui->label_framerate_datapoints, tr("Framerate datapoints: %0", "Framerate graph datapoints"));
+	SubscribeTooltip(ui->perf_overlay_framerate_datapoints, tooltips.settings.perf_overlay_framerate_datapoints);
+
+	EnhanceSlider(emu_settings_type::PerfOverlayFrametimeDatapoints, ui->slider_frametime_datapoints, ui->label_frametime_datapoints, tr("Frametime datapoints: %0", "Frametime graph datapoints"));
+	SubscribeTooltip(ui->perf_overlay_frametime_datapoints, tooltips.settings.perf_overlay_frametime_datapoints);
+
 	EnhanceSlider(emu_settings_type::ShaderLoadBgDarkening, ui->shaderLoadBgDarkening, ui->label_shaderLoadBgDarkening, tr("Background darkening: %0 %", "Shader load background darkening"));
 	SubscribeTooltip(ui->shaderLoadBgDarkening, tooltips.settings.shader_load_bg_darkening);
 
@@ -1438,9 +1444,9 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> gui_settings, std
 
 			QString glossary;
 
-			for (const auto& [format, description] : window_title_glossary)
+			for (const auto& entry : window_title_glossary)
 			{
-				glossary += format + "\t = " + description + "\n";
+				glossary += entry.first + "\t = " + entry.second + "\n";
 			}
 
 			return tr("Glossary:\n\n%0\nPreview:\n\n%1\n", "Game window title").arg(glossary).arg(game_window_title);
@@ -1780,6 +1786,9 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> gui_settings, std
 
 	m_emu_settings->EnhanceCheckBox(ui->spuDebug, emu_settings_type::SPUDebug);
 	SubscribeTooltip(ui->spuDebug, tooltips.settings.spu_debug);
+
+	m_emu_settings->EnhanceCheckBox(ui->mfcDebug, emu_settings_type::MFCDebug);
+	SubscribeTooltip(ui->mfcDebug, tooltips.settings.mfc_debug);
 
 	m_emu_settings->EnhanceCheckBox(ui->setDAZandFTZ, emu_settings_type::SetDAZandFTZ);
 	SubscribeTooltip(ui->setDAZandFTZ, tooltips.settings.set_daz_and_ftz);
