@@ -3528,16 +3528,6 @@
              </widget>
             </item>
             <item>
-<<<<<<< HEAD
-             <spacer name="verticalSpacer_25">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-=======
              <spacer name="verticalSpacerDebugGPU">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -3549,7 +3539,6 @@
                <size>
                 <width>0</width>
                 <height>0</height>
->>>>>>> rpcs3/master
                </size>
               </property>
              </spacer>
