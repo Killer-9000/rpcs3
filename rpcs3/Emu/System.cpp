@@ -363,7 +363,7 @@ namespace
 					dlg->type.se_normal = true;
 					dlg->type.bg_invisible = true;
 					dlg->type.progress_bar_count = 1;
-					dlg->on_close = [](s32 status)
+					dlg->on_close = [](s32 /*status*/)
 					{
 						Emu.CallAfter([]()
 						{
@@ -1647,9 +1647,24 @@ game_boot_result Emulator::Load(const std::string& title_id, bool add_only, bool
 			{
 				if (!fs::is_file(g_cfg.vfs.get_dev_flash() + "sys/external/liblv2.sprx"))
 				{
-					if (!GetCallbacks().on_missing_fw())
+					const auto libs = g_cfg.core.libraries_control.get_set();
+
+					extern const std::map<std::string_view, int> g_prx_list;
+
+					// Check if there are any firmware SPRX which may be LLEd during emulation 
+					// Don't prompt GUI confirmation if there aren't any
+					if (std::any_of(g_prx_list.begin(), g_prx_list.end(), [&libs](auto& lib)
+					{
+						return libs.count(std::string(lib.first) + ":lle") || (!lib.second && !libs.count(std::string(lib.first) + ":hle"));
+					}))
 					{
 						Stop();
+
+						CallAfter([this]()
+						{
+							GetCallbacks().on_missing_fw();
+						});
+
 						return game_boot_result::firmware_missing;
 					}
 				}
@@ -1909,7 +1924,7 @@ void Emulator::Stop(bool restart)
 	aw_colc = 0;
 	aw_used = 0;
 
-	atomic_wait::parse_hashtable([](u64 id, u32 refs, u64 ptr, u32 maxc) -> bool
+	atomic_wait::parse_hashtable([](u64 /*id*/, u32 refs, u64 ptr, u32 maxc) -> bool
 	{
 		aw_refs += refs != 0;
 		aw_used += ptr != 0;
@@ -1962,10 +1977,15 @@ bool Emulator::Quit(bool force_quit)
 	// The callback is only used if we actually quit RPCS3
 	const auto on_exit = []()
 	{
-		// Deinitialize object manager to prevent any hanging objects at program exit
-		g_fxo->clear();
+		Emu.CleanUp();
 	};
 	return GetCallbacks().try_to_quit(force_quit, on_exit);
+}
+
+void Emulator::CleanUp()
+{
+	// Deinitialize object manager to prevent any hanging objects at program exit
+	g_fxo->clear();
 }
 
 std::string Emulator::GetFormattedTitle(double fps) const

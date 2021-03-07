@@ -22,6 +22,11 @@ public:
 	bool init_lightbar{true};
 	bool update_lightbar{true};
 	bool update_player_leds{true};
+
+	// Controls for lightbar pulse. This seems somewhat hacky for now, as I haven't found out a nicer way.
+	bool lightbar_on{false};
+	bool lightbar_on_old{false};
+	steady_clock::time_point last_lightbar_time;
 };
 
 class dualsense_pad_handler final : public hid_pad_handler<DualSenseDevice>
@@ -66,6 +71,7 @@ public:
 	~dualsense_pad_handler();
 
 	void SetPadData(const std::string& padId, u32 largeMotor, u32 smallMotor, s32 r, s32 g, s32 b, bool battery_led, u32 battery_led_brightness) override;
+	u32 get_battery_level(const std::string& padId) override;
 	void init_config(pad_config* cfg, const std::string& name) override;
 
 private:

@@ -43,6 +43,7 @@ namespace
 		VALID_FLAG_1_PLAYER_INDICATOR_CONTROL_ENABLE = 0x10,
 		VALID_FLAG_2_LIGHTBAR_SETUP_CONTROL_ENABLE   = 0x02,
 		POWER_SAVE_CONTROL_MIC_MUTE                  = 0x10,
+		LIGHTBAR_SETUP_LIGHT_ON                      = 0x01,
 		LIGHTBAR_SETUP_LIGHT_OUT                     = 0x02,
 	};
 	
@@ -138,7 +139,7 @@ dualsense_pad_handler::dualsense_pad_handler()
 	b_has_deadzones = true;
 	b_has_led = true;
 	b_has_rgb = true;
-	b_has_battery = false;
+	b_has_battery = true;
 
 	m_name_string = "DualSense Pad #";
 	m_max_devices = CELL_PAD_MAX_PORT_NUM;
@@ -174,7 +175,7 @@ void dualsense_pad_handler::check_add_device(hid_device* hidDevice, std::string_
 
 	std::string serial;
 
-	std::array<u8, 64> buf{};
+	std::array<u8, 65> buf{};
 	buf[0] = 0x09;
 
 	// This will give us the bluetooth mac address of the device, regardless if we are on wired or bluetooth.
@@ -204,6 +205,20 @@ void dualsense_pad_handler::check_add_device(hid_device* hidDevice, std::string_
 		return;
 	}
 
+	u32 hw_version{};
+	u32 fw_version{};
+
+	buf[0] = 0x20;
+	if (hid_get_feature_report(hidDevice, buf.data(), 64) == 65)
+	{
+		hw_version = read_u32(&buf[24]);
+		fw_version = read_u32(&buf[28]);
+	}
+	else
+	{
+		dualsense_log.error("Could not retrieve firmware version");
+	}
+
 	if (hid_set_nonblocking(hidDevice, 1) == -1)
 	{
 		dualsense_log.error("check_add_device: hid_set_nonblocking failed! Reason: %s", hid_error(hidDevice));
@@ -221,7 +236,7 @@ void dualsense_pad_handler::check_add_device(hid_device* hidDevice, std::string_
 	// Get bluetooth information
 	get_data(device);
 
-	dualsense_log.notice("Added device: bluetooth=%d, data_mode=%s, serial='%s', path='%s'", device->bt_controller, device->data_mode, serial, device->path);
+	dualsense_log.notice("Added device: bluetooth=%d, data_mode=%s, serial='%s', hw_version: 0x%x, fw_version: 0x%x, path='%s'", device->bt_controller, device->data_mode, serial, hw_version, fw_version, device->path);
 }
 
 void dualsense_pad_handler::init_config(pad_config* cfg, const std::string& name)
@@ -347,6 +362,35 @@ dualsense_pad_handler::DataStatus dualsense_pad_handler::get_data(DualSenseDevic
 			const s16 cal_value = apply_calibration(raw_value, device->calib_data[i]);
 			buf[calib_offset++] = (static_cast<u16>(cal_value) >> 0) & 0xFF;
 			buf[calib_offset++] = (static_cast<u16>(cal_value) >> 8) & 0xFF;
+		}
+	}
+
+	// For now let's only get battery info in enhanced mode
+	if (device->data_mode == DualSenseDevice::DualSenseDataMode::Enhanced)
+	{
+		const u8 battery_state = buf[offset + 52];
+		const u8 battery_value = battery_state & 0x0F; // 10% per unit, starting with 0-9%. So 100% equals unit 10
+		const u8 charge_info = (battery_state & 0xF0) >> 4;
+
+		switch (charge_info)
+		{
+		case 0x0:
+			device->battery_level = battery_value;
+			device->cable_state = 0;
+			break;
+		case 0x1:
+			device->battery_level = battery_value;
+			device->cable_state = 1;
+			break;
+		case 0x2:
+			device->battery_level = 10;
+			device->cable_state = 1;
+			break;
+		default:
+			// We don't care about the other values. Just set battery to 0.
+			device->battery_level = 0;
+			device->cable_state = 0;
+			break;
 		}
 	}
 
@@ -573,10 +617,10 @@ void dualsense_pad_handler::get_extended_info(const std::shared_ptr<PadDevice>& 
 	if (!dualsense_device || !pad)
 		return;
 
-	auto buf = dualsense_device->padData;
-
 	pad->m_battery_level = dualsense_device->battery_level;
 	pad->m_cable_state   = dualsense_device->cable_state;
+
+	auto& buf = dualsense_device->padData;
 
 	// these values come already calibrated, all we need to do is convert to ds3 range
 
@@ -709,13 +753,13 @@ std::unordered_map<u64, u16> dualsense_pad_handler::get_button_values(const std:
 		keyBuffer[DualSenseKeyCodes::L3]      = ((data & 0x40) != 0) ? 255 : 0;
 		keyBuffer[DualSenseKeyCodes::R3]      = ((data & 0x80) != 0) ? 255 : 0;
 
-		keyBuffer[DualSenseKeyCodes::L2] = buf[7];
-		keyBuffer[DualSenseKeyCodes::R2] = buf[8];
-
 		data = buf[6];
 		keyBuffer[DualSenseKeyCodes::PSButton] = ((data & 0x01) != 0) ? 255 : 0;
 		keyBuffer[DualSenseKeyCodes::TouchPad] = ((data & 0x02) != 0) ? 255 : 0;
 		keyBuffer[DualSenseKeyCodes::Mic]      = ((data & 0x04) != 0) ? 255 : 0;
+
+		keyBuffer[DualSenseKeyCodes::L2] = buf[7];
+		keyBuffer[DualSenseKeyCodes::R2] = buf[8];
 
 		return keyBuffer;
 	}
@@ -735,6 +779,9 @@ std::unordered_map<u64, u16> dualsense_pad_handler::get_button_values(const std:
 	// Right Stick Y Axis (Up is the negative for some reason)
 	keyBuffer[DualSenseKeyCodes::RSYNeg] = Clamp0To255((buf[3] - 127.5f) * 2.0f);
 	keyBuffer[DualSenseKeyCodes::RSYPos] = Clamp0To255((127.5f - buf[3]) * 2.0f);
+
+	keyBuffer[DualSenseKeyCodes::L2] = buf[4];
+	keyBuffer[DualSenseKeyCodes::R2] = buf[5];
 
 	u8 data = buf[7] & 0xf;
 	switch (data)
@@ -813,9 +860,6 @@ std::unordered_map<u64, u16> dualsense_pad_handler::get_button_values(const std:
 	keyBuffer[DualSenseKeyCodes::L3]      = ((data & 0x40) != 0) ? 255 : 0;
 	keyBuffer[DualSenseKeyCodes::R3]      = ((data & 0x80) != 0) ? 255 : 0;
 
-	keyBuffer[DualSenseKeyCodes::L2] = buf[4];
-	keyBuffer[DualSenseKeyCodes::R2] = buf[5];
-
 	data = buf[9];
 	keyBuffer[DualSenseKeyCodes::PSButton] = ((data & 0x01) != 0) ? 255 : 0;
 	keyBuffer[DualSenseKeyCodes::TouchPad] = ((data & 0x02) != 0) ? 255 : 0;
@@ -860,48 +904,66 @@ int dualsense_pad_handler::send_output_report(DualSenseDevice* device)
 		return -2; // hid_write and hid_write_control return -1 on error
 
 	output_report_common common{};
-	common.valid_flag_0 |= VALID_FLAG_0_COMPATIBLE_VIBRATION;
-	common.valid_flag_0 |= VALID_FLAG_0_HAPTICS_SELECT;
-	common.motor_left  = device->large_motor;
-	common.motor_right = device->small_motor;
 
+	// Only initialize lightbar in the first output report. The controller didn't seem to update the player LEDs correctly otherwise. (Might be placebo)
 	if (device->init_lightbar)
 	{
 		device->init_lightbar = false;
+		device->lightbar_on = true;
+		device->lightbar_on_old = true;
 
 		common.valid_flag_2 |= VALID_FLAG_2_LIGHTBAR_SETUP_CONTROL_ENABLE;
 		common.lightbar_setup = LIGHTBAR_SETUP_LIGHT_OUT; // Fade light out.
 	}
-
-	if (device->update_lightbar)
+	else
 	{
-		device->update_lightbar = false;
+		common.valid_flag_0 |= VALID_FLAG_0_COMPATIBLE_VIBRATION;
+		common.valid_flag_0 |= VALID_FLAG_0_HAPTICS_SELECT;
+		common.motor_left  = device->large_motor;
+		common.motor_right = device->small_motor;
 
-		common.valid_flag_1 |= VALID_FLAG_1_LIGHTBAR_CONTROL_ENABLE;
-		common.lightbar_r = config->colorR; // red
-		common.lightbar_g = config->colorG; // green
-		common.lightbar_b = config->colorB; // blue
-	}
-
-	if (device->update_player_leds)
-	{
-		device->update_player_leds = false;
-
-		// The dualsense controller uses 5 LEDs to indicate the player ID.
-		// Use OR with 0x1, 0x2, 0x4, 0x8 and 0x10 to enable the LEDs (from leftmost to rightmost).
-		common.valid_flag_1 |= VALID_FLAG_1_PLAYER_INDICATOR_CONTROL_ENABLE;
-
-		switch (m_player_id)
+		if (device->update_lightbar)
 		{
-		case 0: common.player_leds = 0b00100; break;
-		case 1: common.player_leds = 0b01010; break;
-		case 2: common.player_leds = 0b10101; break;
-		case 3: common.player_leds = 0b11011; break;
-		case 4: common.player_leds = 0b11111; break;
-		case 5: common.player_leds = 0b10111; break;
-		case 6: common.player_leds = 0b11101; break;
-		default:
-			fmt::throw_exception("Dualsense is using forbidden player id %d", m_player_id);
+			device->update_lightbar = false;
+
+			common.valid_flag_1 |= VALID_FLAG_1_LIGHTBAR_CONTROL_ENABLE;
+
+			if (device->lightbar_on)
+			{
+				common.lightbar_r = config->colorR; // red
+				common.lightbar_g = config->colorG; // green
+				common.lightbar_b = config->colorB; // blue
+			}
+			else
+			{
+				common.lightbar_r = 0;
+				common.lightbar_g = 0;
+				common.lightbar_b = 0;
+			}
+
+			device->lightbar_on_old = device->lightbar_on;
+		}
+
+		if (device->update_player_leds)
+		{
+			device->update_player_leds = false;
+
+			// The dualsense controller uses 5 LEDs to indicate the player ID.
+			// Use OR with 0x1, 0x2, 0x4, 0x8 and 0x10 to enable the LEDs (from leftmost to rightmost).
+			common.valid_flag_1 |= VALID_FLAG_1_PLAYER_INDICATOR_CONTROL_ENABLE;
+
+			switch (m_player_id)
+			{
+			case 0: common.player_leds = 0b00100; break;
+			case 1: common.player_leds = 0b01010; break;
+			case 2: common.player_leds = 0b10101; break;
+			case 3: common.player_leds = 0b11011; break;
+			case 4: common.player_leds = 0b11111; break;
+			case 5: common.player_leds = 0b10111; break;
+			case 6: common.player_leds = 0b11101; break;
+			default:
+				fmt::throw_exception("Dualsense is using forbidden player id %d", m_player_id);
+			}
 		}
 	}
 
@@ -952,7 +1014,62 @@ void dualsense_pad_handler::apply_pad_data(const std::shared_ptr<PadDevice>& dev
 	const int speed_large = config->enable_vibration_motor_large ? pad->m_vibrateMotors[idx_l].m_value : vibration_min;
 	const int speed_small = config->enable_vibration_motor_small ? pad->m_vibrateMotors[idx_s].m_value : vibration_min;
 
-	dualsense_dev->new_output_data |= dualsense_dev->large_motor != speed_large || dualsense_dev->small_motor != speed_small;
+	const bool wireless    = dualsense_dev->cable_state == 0;
+	const bool low_battery = dualsense_dev->battery_level <= 1;
+	const bool is_blinking = dualsense_dev->led_delay_on > 0 || dualsense_dev->led_delay_off > 0;
+	
+	// Blink LED when battery is low
+	if (config->led_low_battery_blink)
+	{
+		// we are now wired or have okay battery level -> stop blinking
+		if (is_blinking && !(wireless && low_battery))
+		{
+			dualsense_dev->lightbar_on = true;
+			dualsense_dev->led_delay_on = 0;
+			dualsense_dev->led_delay_off = 0;
+			dualsense_dev->update_lightbar = true;
+		}
+		// we are now wireless and low on battery -> blink
+		else if (!is_blinking && wireless && low_battery)
+		{
+			dualsense_dev->led_delay_on = 100;
+			dualsense_dev->led_delay_off = 100;
+			dualsense_dev->update_lightbar = true;
+		}
+
+		// Turn lightbar on and off in an interval. I wanted to do an automatic pulse, but I haven't found out how to do that yet.
+		if (dualsense_dev->led_delay_on > 0)
+		{
+			if (steady_clock::time_point now = steady_clock::now(); (now - dualsense_dev->last_lightbar_time) > 500ms)
+			{
+				dualsense_dev->lightbar_on = !dualsense_dev->lightbar_on;
+				dualsense_dev->last_lightbar_time = now;
+				dualsense_dev->update_lightbar = true;
+			}
+		}
+	}
+	else if (!dualsense_dev->lightbar_on)
+	{
+		dualsense_dev->lightbar_on = true;
+		dualsense_dev->update_lightbar = true;
+	}
+
+	// Use LEDs to indicate battery level
+	if (config->led_battery_indicator)
+	{
+		// This makes sure that the LED color doesn't update every 1ms. DS4 only reports battery level in 10% increments
+		if (dualsense_dev->last_battery_level != dualsense_dev->battery_level)
+		{
+			const u32 combined_color = get_battery_color(dualsense_dev->battery_level, config->led_battery_indicator_brightness);
+			config->colorR.set(combined_color >> 8);
+			config->colorG.set(combined_color & 0xff);
+			config->colorB.set(0);
+			dualsense_dev->update_lightbar = true;
+			dualsense_dev->last_battery_level = dualsense_dev->battery_level;
+		}
+	}
+
+	dualsense_dev->new_output_data |= dualsense_dev->update_lightbar || dualsense_dev->large_motor != speed_large || dualsense_dev->small_motor != speed_small;
 
 	dualsense_dev->large_motor = speed_large;
 	dualsense_dev->small_motor = speed_small;
@@ -966,7 +1083,7 @@ void dualsense_pad_handler::apply_pad_data(const std::shared_ptr<PadDevice>& dev
 	}
 }
 
-void dualsense_pad_handler::SetPadData(const std::string& padId, u32 largeMotor, u32 smallMotor, s32 r, s32 g, s32 b, bool /*battery_led*/, u32 /*battery_led_brightness*/)
+void dualsense_pad_handler::SetPadData(const std::string& padId, u32 largeMotor, u32 smallMotor, s32 r, s32 g, s32 b, bool battery_led, u32 battery_led_brightness)
 {
 	std::shared_ptr<DualSenseDevice> device = get_hid_device(padId);
 	if (device == nullptr || device->hidDevice == nullptr)
@@ -992,16 +1109,39 @@ void dualsense_pad_handler::SetPadData(const std::string& padId, u32 largeMotor,
 	}
 
 	ensure(device->config);
+	device->update_lightbar = true;
 
 	// Set new LED color (see ds4_pad_handler)
-	if (r >= 0 && g >= 0 && b >= 0 && r <= 255 && g <= 255 && b <= 255)
+	if (battery_led)
+	{
+		const u32 combined_color = get_battery_color(device->battery_level, battery_led_brightness);
+		device->config->colorR.set(combined_color >> 8);
+		device->config->colorG.set(combined_color & 0xff);
+		device->config->colorB.set(0);
+	}
+	else if (r >= 0 && g >= 0 && b >= 0 && r <= 255 && g <= 255 && b <= 255)
 	{
 		device->config->colorR.set(r);
 		device->config->colorG.set(g);
 		device->config->colorB.set(b);
-		device->update_lightbar = true;
+	}
+
+	if (device->init_lightbar)
+	{
+		// Initialize first
+		send_output_report(device.get());
 	}
 
 	// Start/Stop the engines :)
 	send_output_report(device.get());
+}
+
+u32 dualsense_pad_handler::get_battery_level(const std::string& padId)
+{
+	std::shared_ptr<DualSenseDevice> device = get_hid_device(padId);
+	if (device == nullptr || device->hidDevice == nullptr)
+	{
+		return 0;
+	}
+	return std::min<u32>(device->battery_level * 10 + 5, 100); // 10% per unit, starting with 0-9%. So 100% equals unit 10
 }
