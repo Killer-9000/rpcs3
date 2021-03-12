@@ -190,6 +190,8 @@ struct cfg_root : cfg::node
 			cfg::_bool force_fifo{ this, "Force FIFO present mode" };
 			cfg::_bool force_primitive_restart{ this, "Force primitive restart flag" };
 			cfg::_bool force_disable_exclusive_fullscreen_mode{this, "Force Disable Exclusive Fullscreen Mode"};
+			cfg::_bool asynchronous_texture_streaming{ this, "Asynchronous Texture Streaming", true, true };
+			cfg::_enum<vk_gpu_scheduler_mode> asynchronous_scheduler{ this, "Asynchronous Queue Scheduler", vk_gpu_scheduler_mode::device };
 
 		} vk{ this };
 

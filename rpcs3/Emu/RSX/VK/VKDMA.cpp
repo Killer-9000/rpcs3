@@ -256,15 +256,22 @@ namespace vk
 	void create_dma_block(std::unique_ptr<dma_block>& block, u32 base_address, usz expected_length)
 	{
 		const auto vendor = g_render_device->gpu().get_driver_vendor();
-		const auto chip  = g_render_device->gpu().get_chip_class();
+		[[maybe_unused]] const auto chip  = g_render_device->gpu().get_chip_class();
 
 #ifdef _WIN32
 		bool allow_host_buffers;
 		if (vendor == driver_vendor::NVIDIA)
 		{
-			allow_host_buffers = (chip != chip_class::NV_mobile_kepler) ?
-				rsx::get_location(base_address) == CELL_GCM_LOCATION_LOCAL :
-				false;
+			if (g_cfg.video.vk.asynchronous_texture_streaming)
+			{
+				allow_host_buffers = (chip != chip_class::NV_mobile_kepler) ?
+					test_host_pointer(base_address, expected_length) :
+					false;
+			}
+			else
+			{
+				allow_host_buffers = false;
+			}
 		}
 		else
 		{

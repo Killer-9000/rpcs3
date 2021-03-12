@@ -1,8 +1,9 @@
 #include "stdafx.h"
-#include "VKHelpers.h"
-#include "VKFormats.h"
+#include "VKAsyncScheduler.h"
 #include "VKCompute.h"
 #include "VKDMA.h"
+#include "VKHelpers.h"
+#include "VKFormats.h"
 #include "VKRenderPass.h"
 #include "VKRenderTargets.h"
 
@@ -800,12 +801,11 @@ namespace vk
 	static const vk::command_buffer& prepare_for_transfer(const vk::command_buffer& primary_cb, vk::image* dst_image, rsx::flags32_t& flags)
 	{
 		const vk::command_buffer* pcmd = nullptr;
-#if 0
 		if (flags & image_upload_options::upload_contents_async)
 		{
-			auto cb = vk::async_transfer_get_current();
-			cb->begin();
-			pcmd = cb;
+			auto async_cmd = g_fxo->get<vk::async_scheduler_thread>().get_current();
+			async_cmd->begin();
+			pcmd = async_cmd;
 
 			if (!(flags & image_upload_options::preserve_image_layout))
 			{
@@ -813,7 +813,6 @@ namespace vk
 			}
 		}
 		else
-#endif
 		{
 			if (vk::is_renderpass_open(primary_cb))
 			{
@@ -1071,6 +1070,13 @@ namespace vk
 	{
 		vk::image* real_src = src;
 		vk::image* real_dst = dst;
+
+		if (dst->current_layout == VK_IMAGE_LAYOUT_UNDEFINED)
+		{
+			// Watch out for lazy init
+			ensure(src != dst);
+			dst->change_layout(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		}
 
 		// Optimization pass; check for pass-through data transfer
 		if (!xfer_info.flip_horizontal && !xfer_info.flip_vertical && src_area.height() == dst_area.height())
