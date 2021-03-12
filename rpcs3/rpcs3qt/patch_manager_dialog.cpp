@@ -71,6 +71,7 @@ patch_manager_dialog::patch_manager_dialog(std::shared_ptr<gui_settings> gui_set
 
 	// Initialize gui controls
 	ui->patch_filter->setText(QString::fromStdString(title_id));
+    ui->cb_enable_legacy_patches->setChecked(m_legacy_patches_enabled);
 	ui->cb_owned_games_only->setChecked(m_show_owned_games_only);
 
 	ui->buttonBox->button(QDialogButtonBox::RestoreDefaults)->setText(tr("Download latest patches"));
